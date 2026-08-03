@@ -16,6 +16,7 @@ import type {
 } from '../assets/scripts/domain/models/game-types';
 import { chooseAiAction } from '../assets/scripts/domain/ai/choose-action';
 import { createMatchResultViewModel } from '../assets/scripts/application/match-result-view-model';
+import { diceResultRowWidth, MAX_RESULT_DICE } from '../assets/scripts/application/dice-result-layout';
 import {
   canRoll,
   canSelectBowl,
@@ -330,7 +331,7 @@ function gameTemplate(): string {
           <div class="dice-stage-window">${diceTiles(state.currentRoll.values)}</div>
           <div class="roll-prompt"><p class="eyebrow">PLACEMENT</p><h2>밥그릇에 놓는 중…</h2><small>선택 결과를 반영하고 있어요.</small></div>
         </section>`
-        : `<section class="dice-tray game-dice-tray dice-stage has-result" aria-label="현재 주사위 결과">
+        : `<section class="dice-tray game-dice-tray dice-stage has-result" style="--dice-row-min-width:${diceResultRowWidth(MAX_RESULT_DICE)}px" aria-label="현재 주사위 결과">
       <div class="dice-stage-window">${diceTiles(state.currentRoll.values)}</div>
       <div class="roll-summary"><div><p class="eyebrow">ROLL RESULT</p><h2>놓을 숫자를 고르세요</h2></div></div>
       <div class="choice-buttons">

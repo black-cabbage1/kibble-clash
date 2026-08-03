@@ -48,7 +48,7 @@ npm run preview:serve
 npm run build
 ```
 
-현재 자동 테스트는 도메인 규칙, 캐릭터 선택, 턴 UI 흐름을 포함한 39개 항목을 검증한다. `npm run build`는 프로젝트 루트에 `kibble-clash.ait`를 생성한다.
+현재 자동 테스트는 도메인 규칙, 캐릭터 선택, 턴 UI 흐름과 주사위 결과 레이아웃을 포함한 48개 항목을 검증한다. `npm run build`는 프로젝트 루트에 `kibble-clash.ait`를 생성한다.
 
 ## Apps in Toss 테스트
 
