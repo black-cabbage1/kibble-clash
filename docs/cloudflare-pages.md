@@ -27,7 +27,6 @@ npm run pages:build
 배포 대상은 `dist/web`이며 다음 파일이 포함되어야 한다.
 
 - `index.html`
-- `_redirects`
 - `manifest.webmanifest`
 - `sw.js`
 - `assets/`와 게임 이미지 디렉터리
@@ -54,7 +53,7 @@ Cloudflare의 Git 연결 과정에서 별도의 **Deploy command** 입력란이 
 | Deploy command | `npx wrangler deploy` |
 | Version command | 비워 둠 |
 
-`[assets]` 설정이 `dist/web`을 배포하며, 존재하지 않는 경로는 SPA의 `index.html`로 연결한다.
+`[assets]` 설정이 `dist/web`을 배포하며, `not_found_handling = "single-page-application"` 설정이 존재하지 않는 경로를 SPA의 `index.html`로 연결한다. Workers Builds에서는 Pages용 `_redirects` 파일을 함께 사용하지 않는다.
 
 ## 배포 후 확인
 
