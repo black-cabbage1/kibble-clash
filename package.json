@@ -1,0 +1,35 @@
+{
+  "name": "kibble-clash",
+  "version": "0.1.0",
+  "private": true,
+  "uuid": "ad4ce046-2ac0-4ba5-94ca-9dd606397c86",
+  "creator": {
+    "version": "3.8.7"
+  },
+  "type": "module",
+  "description": "강아지 캐릭터와 주사위로 사료를 쟁탈하는 모바일 전략 게임",
+  "scripts": {
+    "test": "vitest",
+    "test:run": "vitest run",
+    "typecheck": "tsc --noEmit",
+    "preview:dev": "vite --config vite.config.ts",
+    "preview:build": "vite build --config vite.config.ts",
+    "preview:serve": "vite preview --config vite.config.ts",
+    "pages:build": "npm run typecheck && npm run test:run && npm run preview:build",
+    "pages:deploy": "npx wrangler pages deploy dist/web --project-name kibble-clash",
+    "build": "ait build",
+    "dev": "granite dev",
+    "deploy": "ait deploy"
+  },
+  "dependencies": {
+    "@apps-in-toss/web-framework": "2.10.8"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2",
+    "vite": "7.3.6",
+    "vitest": "3.2.7"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "id": "/",
+  "name": "멍밥쟁탈전",
+  "short_name": "멍밥쟁탈전",
+  "description": "주사위를 굴려 최고의 밥그릇을 차지하는 귀여운 강아지 보드게임",
+  "lang": "ko-KR",
+  "dir": "ltr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "landscape",
+  "background_color": "#f6e5cf",
+  "theme_color": "#d8bd89",
+  "categories": ["games", "entertainment"],
+  "icons": [
+    {
+      "src": "/ui/kibble-clash-app-icon.png",
+      "sizes": "1254x1254",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
