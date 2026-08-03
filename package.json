@@ -17,6 +17,7 @@
     "preview:serve": "vite preview --config vite.config.ts",
     "pages:build": "npm run typecheck && npm run test:run && npm run preview:build",
     "pages:deploy": "npx wrangler pages deploy dist/web --project-name kibble-clash",
+    "cloudflare:deploy": "npx wrangler deploy",
     "build": "ait build",
     "dev": "granite dev",
     "deploy": "ait deploy"
@@ -27,7 +28,8 @@
   "devDependencies": {
     "typescript": "7.0.2",
     "vite": "7.3.6",
-    "vitest": "3.2.7"
+    "vitest": "3.2.7",
+    "wrangler": "4.118.0"
   },
   "engines": {
     "node": ">=18"

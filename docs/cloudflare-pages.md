@@ -42,7 +42,19 @@ npm run pages:build
 npm run pages:deploy
 ```
 
-`wrangler.toml`은 Pages 프로젝트 이름과 출력 디렉터리를 정의한다. 이미 대시보드에서 같은 이름의 프로젝트를 별도 설정한 경우에는 배포 전에 대시보드 설정과 파일 내용을 맞춘다.
+Pages 직접 업로드 명령은 `dist/web`을 명시적으로 전달한다. 이미 대시보드에서 같은 이름의 프로젝트를 별도 설정한 경우에는 배포 전에 프로젝트 이름을 맞춘다.
+
+## Workers Builds 화면을 사용한 경우
+
+Cloudflare의 Git 연결 과정에서 별도의 **Deploy command** 입력란이 보이고 기본 명령이 `npx wrangler deploy`라면 Workers Builds 정적 자산 방식이다. 현재 `wrangler.toml`은 이 방식도 지원한다.
+
+| 항목 | 값 |
+| --- | --- |
+| Build command | `npm run pages:build` |
+| Deploy command | `npx wrangler deploy` |
+| Version command | 비워 둠 |
+
+`[assets]` 설정이 `dist/web`을 배포하며, 존재하지 않는 경로는 SPA의 `index.html`로 연결한다.
 
 ## 배포 후 확인
 
