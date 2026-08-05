@@ -16,7 +16,6 @@ import type {
 } from '../assets/scripts/domain/models/game-types';
 import { chooseAiAction } from '../assets/scripts/domain/ai/choose-action';
 import { createMatchResultViewModel } from '../assets/scripts/application/match-result-view-model';
-import { diceResultRowWidth, MAX_RESULT_DICE } from '../assets/scripts/application/dice-result-layout';
 import {
   canRoll,
   canSelectBowl,
@@ -31,6 +30,13 @@ import {
 } from '../assets/scripts/platform/storage/selected-character-storage';
 import { setupGameOrientation } from '../assets/scripts/platform/apps-in-toss/mini-game-platform';
 import {
+  isSoundEnabled,
+  playSound,
+  scheduleSound,
+  setSoundEnabled,
+  stopAllSounds,
+} from '../assets/scripts/platform/audio/sound-manager';
+import {
   EMPTY_GAME_SAFE_AREA,
   subscribeToGameSafeArea,
   type GameSafeAreaInsets,
@@ -38,7 +44,10 @@ import {
 
 // 토스 WebView가 게임 화면을 그리기 시작하자마자 가로 방향으로 전환한다.
 const restoreOrientation = setupGameOrientation();
-window.addEventListener('pagehide', restoreOrientation, { once: true });
+window.addEventListener('pagehide', () => {
+  stopAllSounds();
+  restoreOrientation();
+}, { once: true });
 
 const isAppsInTossHost = /(^|\.)((private-)?apps\.tossmini\.com)$/i.test(window.location.hostname);
 if ('serviceWorker' in navigator && !isAppsInTossHost) {
@@ -67,7 +76,13 @@ let reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
 let aiTurnTimer: number | null = null;
 let turnTimer: number | null = null;
 let turnPhase: TurnPhase = 'waiting';
-let rollPresentation: 'rolling' | 'result' = 'rolling';
+type RollPresentation = 'rolling' | 'result-shown' | 'grouped';
+
+const RESULT_SHOWN_DURATION_MS = 1_000;
+const GROUPED_RESULT_DURATION_MS = 1_500;
+
+let rollPresentation: RollPresentation = 'rolling';
+let selectedRollFace: number | null = null;
 let sessionVersion = 0;
 let selectedCharacterId = loadSelectedCharacter();
 let activeGameConfig: GameConfig = createGameConfigForCharacter(selectedCharacterId);
@@ -139,6 +154,11 @@ function homeTemplate(): string {
         <button class="motion-setting" data-action="toggle-motion" aria-pressed="${reduceMotion}">
           <span><strong>동작 줄이기</strong><small>캐릭터와 장식의 움직임을 줄입니다.</small></span>
           <b>${reduceMotion ? '켜짐' : '꺼짐'}</b>
+        </button>
+        <button class="motion-setting sound-setting" data-action="toggle-sound" role="switch"
+          aria-checked="${isSoundEnabled()}" aria-label="효과음, ${isSoundEnabled() ? '켜짐' : '꺼짐'}">
+          <span><strong>효과음</strong><small>게임 효과음을 재생합니다.</small></span>
+          <b>${isSoundEnabled() ? '켜짐' : '꺼짐'}</b>
         </button>`}
     </div>
   </section>`;
@@ -282,6 +302,19 @@ function diceTiles(values: number[]): string {
   </div>`;
 }
 
+function groupedDiceChips(counts: readonly number[], interactive = false, disabled = false): string {
+  const chips = counts.flatMap((count, index) => {
+    if (count <= 0) return [];
+    const face = index + 1;
+    const content = `<span class="die-face-icon" aria-hidden="true">${DIE_FACES[index]}</span><b aria-hidden="true">×${count}</b>`;
+    const selected = selectedRollFace === face;
+    return [interactive
+      ? `<button class="die-choice ${selected ? 'is-selected' : ''}" data-face="${face}" aria-label="주사위 ${face}, ${count}개" aria-pressed="${selected}" ${disabled ? 'disabled' : ''}>${content}<span class="selection-check" aria-hidden="true">✓</span></button>`
+      : `<span class="roll-result-chip" aria-label="주사위 ${face}, ${count}개">${content}</span>`];
+  });
+  return `<div class="grouped-dice-results">${chips.join('')}</div>`;
+}
+
 function rollingDiceTiles(): string {
   const values = [3, 6, 2];
   return `<div class="rolled-dice is-rolling" aria-label="주사위를 굴리는 중">
@@ -295,14 +328,17 @@ function idleDiceTiles(): string {
 
 function rollOverlay(): string {
   if (state === null || (turnPhase !== 'roll-ready' && turnPhase !== 'rolling')) return '';
-  const isResult = turnPhase === 'rolling' && rollPresentation === 'result';
+  const isResult = turnPhase === 'rolling' && rollPresentation !== 'rolling';
+  const isGrouped = turnPhase === 'rolling' && rollPresentation === 'grouped';
   const dice = turnPhase === 'roll-ready'
     ? idleDiceTiles()
     : isResult
-      ? diceTiles(state.currentRoll.values.slice(0, 3))
+      ? isGrouped
+        ? groupedDiceChips(state.currentRoll.counts)
+        : diceTiles(state.currentRoll.values)
       : rollingDiceTiles();
-  return `<section class="turn-roll-overlay ${turnPhase === 'rolling' ? 'is-active' : 'is-ready'} ${isResult ? 'is-result' : ''}"
-    aria-live="assertive" ${turnPhase === 'rolling' ? 'aria-busy="true"' : ''}>
+  return `<section class="turn-roll-overlay ${turnPhase === 'rolling' ? 'is-active' : 'is-ready'} ${isResult ? 'is-result' : ''} ${isGrouped ? 'is-grouped' : ''}"
+    aria-live="assertive" ${rollPresentation === 'rolling' && turnPhase === 'rolling' ? 'aria-busy="true"' : ''}>
     <div class="turn-roll-card team-${state.players[state.currentPlayerIndex]?.id ?? ''}">
       <p class="eyebrow">${isResult ? 'ROLL RESULT' : 'YOUR TURN'}</p>
       <h2>${isResult ? '주사위 결과 확정!' : turnPhase === 'rolling' ? '데구르르…' : '내 차례예요!'}</h2>
@@ -317,7 +353,6 @@ function rollOverlay(): string {
 function gameTemplate(): string {
   if (state === null) return '';
   const current = state.players[state.currentPlayerIndex];
-  const faces = availableFaces(state.currentRoll);
   const humanPanel = turnPhase === 'roll-ready'
     ? `<section class="dice-tray game-dice-tray dice-stage is-overlay-waiting" aria-hidden="true">
       <div class="roll-prompt"><p class="eyebrow">DICE YARD</p><h2>턴 시작 준비</h2></div>
@@ -328,19 +363,13 @@ function gameTemplate(): string {
       </section>`
       : turnPhase === 'resolving'
         ? `<section class="dice-tray game-dice-tray dice-stage is-resolving" aria-live="polite" aria-busy="true">
-          <div class="dice-stage-window">${diceTiles(state.currentRoll.values)}</div>
           <div class="roll-prompt"><p class="eyebrow">PLACEMENT</p><h2>밥그릇에 놓는 중…</h2><small>선택 결과를 반영하고 있어요.</small></div>
+          <div class="choice-buttons">${groupedDiceChips(state.currentRoll.counts, true, true)}</div>
         </section>`
-        : `<section class="dice-tray game-dice-tray dice-stage has-result" style="--dice-row-min-width:${diceResultRowWidth(MAX_RESULT_DICE)}px" aria-label="현재 주사위 결과">
-      <div class="dice-stage-window">${diceTiles(state.currentRoll.values)}</div>
+        : `<section class="dice-tray game-dice-tray dice-stage has-result" aria-label="현재 주사위 결과">
       <div class="roll-summary"><div><p class="eyebrow">ROLL RESULT</p><h2>놓을 숫자를 고르세요</h2></div></div>
       <div class="choice-buttons">
-        ${faces.map((face) => {
-          const count = state?.currentRoll.counts[face - 1] ?? 0;
-          return `<button class="die-choice" data-face="${face}" aria-label="${face}번 밥그릇에 주사위 ${count}개 놓기">
-            <span aria-hidden="true">${DIE_FACES[face - 1]}</span><b>${count}개 놓기</b>
-          </button>`;
-        }).join('')}
+        ${groupedDiceChips(state.currentRoll.counts, true)}
       </div>
     </section>`;
   const diceActionPanel = current?.kind === 'human'
@@ -557,20 +586,27 @@ function beginRoll(): void {
   const current = state.players[state.currentPlayerIndex];
   if (current?.kind !== 'human') return;
   turnPhase = 'rolling';
+  selectedRollFace = null;
   rollPresentation = 'rolling';
+  playSound('dice-roll');
   render();
   const scheduledVersion = sessionVersion;
   turnTimer = window.setTimeout(() => {
     if (scheduledVersion !== sessionVersion || state?.players[state.currentPlayerIndex]?.kind !== 'human') return;
-    rollPresentation = 'result';
+    rollPresentation = 'result-shown';
+    playSound('dice-land');
     render();
     turnTimer = window.setTimeout(() => {
-      turnTimer = null;
       if (scheduledVersion !== sessionVersion || state?.players[state.currentPlayerIndex]?.kind !== 'human') return;
-      turnPhase = 'selecting';
+      rollPresentation = 'grouped';
       render();
-      window.requestAnimationFrame(() => app.querySelector<HTMLElement>('.die-choice')?.focus());
-    }, reduceMotion ? 100 : 360);
+      turnTimer = window.setTimeout(() => {
+        turnTimer = null;
+        if (scheduledVersion !== sessionVersion || state?.players[state.currentPlayerIndex]?.kind !== 'human') return;
+        turnPhase = 'selecting';
+        render();
+      }, GROUPED_RESULT_DURATION_MS);
+    }, RESULT_SHOWN_DURATION_MS);
   }, reduceMotion ? 140 : 740);
 }
 
@@ -578,6 +614,8 @@ function resolveHumanChoice(face: number): void {
   if (state === null || !canSelectBowl(turnPhase)) return;
   const current = state.players[state.currentPlayerIndex];
   if (current?.kind !== 'human') return;
+  selectedRollFace = face;
+  playSound('place-dice');
   turnPhase = 'resolving';
   render();
   const scheduledVersion = sessionVersion;
@@ -585,6 +623,8 @@ function resolveHumanChoice(face: number): void {
     turnTimer = null;
     if (scheduledVersion !== sessionVersion || state === null) return;
     state = chooseFace(state, activeGameConfig, face).state;
+    playRoundResultSounds(state);
+    selectedRollFace = null;
     skipClashPresentation = reduceMotion;
     syncTurnPhase();
     render();
@@ -608,10 +648,22 @@ function scheduleAiTurn(): void {
       activeGameConfig,
       choice.face,
     ).state;
+    playSound('place-dice');
+    playRoundResultSounds(state);
     syncTurnPhase();
     skipClashPresentation = reduceMotion;
     render();
   }, 850);
+}
+
+function playRoundResultSounds(gameState: GameState): void {
+  if (gameState.phase !== 'round-result' || gameState.lastRoundSettlement === null) return;
+  const hasClash = gameState.lastRoundSettlement.bowls.some((bowl) => bowl.clashedPlayerIds.length > 0);
+  const scoreAwarded = gameState.lastRoundSettlement.bowls.some((bowl) =>
+    bowl.awards.some((award) => award.reward > 0));
+  if (hasClash) playSound('kibble-clash');
+  if (scoreAwarded) scheduleSound('score-gain', 220);
+  scheduleSound('round-complete', 520);
 }
 
 function setBowlPreview(face: number | null): void {
@@ -660,6 +712,17 @@ app.addEventListener('error', (event) => {
 app.addEventListener('click', (event) => {
   const target = event.target;
   if (!(target instanceof Element)) return;
+  const clickedButton = target.closest<HTMLButtonElement>('button');
+  const action = target.closest<HTMLButtonElement>('[data-action]')?.dataset.action;
+  if (action === 'toggle-sound') {
+    const enabled = !isSoundEnabled();
+    setSoundEnabled(enabled);
+    if (enabled) playSound('ui-click');
+    render();
+    window.requestAnimationFrame(() => app.querySelector<HTMLElement>('[data-action="toggle-sound"]')?.focus());
+    return;
+  }
+  if (clickedButton !== null) playSound('ui-click');
   const characterButton = target.closest<HTMLButtonElement>('[data-character]');
   if (characterButton !== null) {
     const characterId = characterButton.dataset.character;
@@ -674,7 +737,6 @@ app.addEventListener('click', (event) => {
     resolveHumanChoice(Number(faceButton.dataset.face));
     return;
   }
-  const action = target.closest<HTMLButtonElement>('[data-action]')?.dataset.action;
   if (action === 'roll-dice') beginRoll();
   if (action === 'restart') startGame();
   if (action === 'preview-match-result') previewMatchResult();
@@ -711,6 +773,10 @@ app.addEventListener('click', (event) => {
   if (action === 'seed') { nextSeed += 100; render(); }
   if (action === 'continue' && state !== null) {
     state = continueAfterRound(state, activeGameConfig);
+    if (state.phase === 'match-result') {
+      const result = createMatchResultViewModel(state.players);
+      playSound(result.humanResult.isWinner ? 'victory' : 'defeat');
+    }
     syncTurnPhase();
     skipClashPresentation = reduceMotion;
     render();

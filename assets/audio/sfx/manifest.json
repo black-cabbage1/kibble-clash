@@ -1,0 +1,71 @@
+{
+  "sample_rate": 44100,
+  "channels": 1,
+  "bit_depth": 16,
+  "files": [
+    {
+      "name": "ui-click",
+      "usage": "일반 버튼 클릭",
+      "wav": "wav/ui-click.wav",
+      "ogg": "ogg/ui-click.ogg",
+      "duration_seconds": 0.12
+    },
+    {
+      "name": "dice-roll",
+      "usage": "주사위 굴림",
+      "wav": "wav/dice-roll.wav",
+      "ogg": "ogg/dice-roll.ogg",
+      "duration_seconds": 0.95
+    },
+    {
+      "name": "dice-land",
+      "usage": "주사위 결과 확정",
+      "wav": "wav/dice-land.wav",
+      "ogg": "ogg/dice-land.ogg",
+      "duration_seconds": 0.34
+    },
+    {
+      "name": "place-dice",
+      "usage": "밥그릇에 주사위 배치",
+      "wav": "wav/place-dice.wav",
+      "ogg": "ogg/place-dice.ogg",
+      "duration_seconds": 0.24
+    },
+    {
+      "name": "score-gain",
+      "usage": "사료 점수 획득",
+      "wav": "wav/score-gain.wav",
+      "ogg": "ogg/score-gain.ogg",
+      "duration_seconds": 0.55
+    },
+    {
+      "name": "kibble-clash",
+      "usage": "동률 충돌 발생",
+      "wav": "wav/kibble-clash.wav",
+      "ogg": "ogg/kibble-clash.ogg",
+      "duration_seconds": 0.72
+    },
+    {
+      "name": "round-complete",
+      "usage": "라운드 종료",
+      "wav": "wav/round-complete.wav",
+      "ogg": "ogg/round-complete.ogg",
+      "duration_seconds": 0.95
+    },
+    {
+      "name": "victory",
+      "usage": "최종 우승",
+      "wav": "wav/victory.wav",
+      "ogg": "ogg/victory.ogg",
+      "duration_seconds": 1.85
+    },
+    {
+      "name": "defeat",
+      "usage": "우승하지 못한 결과",
+      "wav": "wav/defeat.wav",
+      "ogg": "ogg/defeat.ogg",
+      "duration_seconds": 1.2
+    }
+  ],
+  "ogg_created": true
+}
