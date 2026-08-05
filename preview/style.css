@@ -1789,7 +1789,7 @@ button.primary { color: #4f2d1e; border-color: #9b620e; background: linear-gradi
   z-index: 6;
   display: grid;
   justify-items: center;
-  gap: .45rem;
+  gap: .6rem;
 }
 .home-v3 .home-start {
   min-width: min(360px, 62vw);
@@ -1907,7 +1907,7 @@ button.primary { color: #4f2d1e; border-color: #9b620e; background: linear-gradi
   .home-logo h1 { font-size: clamp(2.2rem, 7vw, 3.3rem); }
   .home-logo p { margin-top: .35rem; font-size: .58rem; }
   .home-tagline-v3 { margin: .3rem 0 .35rem; font-size: .62rem; }
-  .home-v3 .home-actions { gap: .25rem; }
+  .home-v3 .home-actions { gap: .35rem; }
   .home-v3 .home-start { min-height: 42px; padding-block: .35rem; }
   .home-v3 .home-actions > span button { min-height: 34px; }
   .home-dialog { padding: .75rem; }
