@@ -3,20 +3,9 @@ import { defineConfig } from '@apps-in-toss/web-framework/config';
 export default defineConfig({
   appName: 'kibble-clash',
   brand: {
-    displayName: '멍밥쟁탈전',
     primaryColor: '#FFC83D',
-    icon: 'https://static.toss.im/appsintoss/65207/60efbe89-2616-489d-b08b-f4792ac5ff0b.png',
   },
-  web: {
-    host: 'localhost',
-    port: 5173,
-    commands: {
-      dev: 'vite --host',
-      build: 'vite build --config vite.config.ts',
-    },
-  },
-  webViewProps: {
-    type: 'game',
+  webView: {
     bounces: false,
     pullToRefreshEnabled: false,
     overScrollMode: 'never',
@@ -30,5 +19,5 @@ export default defineConfig({
     theme: 'light',
   },
   permissions: [],
-  outdir: 'dist',
+  webBundleDir: 'dist/web',
 });

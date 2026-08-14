@@ -2,6 +2,7 @@ export type SoundEffectName =
   | 'ui-click'
   | 'dice-roll'
   | 'dice-land'
+  | 'select-dice'
   | 'place-dice'
   | 'score-gain'
   | 'kibble-clash'
@@ -15,6 +16,7 @@ const SOUND_URLS: Record<SoundEffectName, URL> = {
   'ui-click': new URL('../../../audio/sfx/ogg/ui-click.ogg', import.meta.url),
   'dice-roll': new URL('../../../audio/sfx/ogg/dice-roll.ogg', import.meta.url),
   'dice-land': new URL('../../../audio/sfx/ogg/dice-land.ogg', import.meta.url),
+  'select-dice': new URL('../../../audio/sfx/ogg/select-dice.ogg', import.meta.url),
   'place-dice': new URL('../../../audio/sfx/ogg/place-dice.ogg', import.meta.url),
   'score-gain': new URL('../../../audio/sfx/ogg/score-gain.ogg', import.meta.url),
   'kibble-clash': new URL('../../../audio/sfx/ogg/kibble-clash.ogg', import.meta.url),

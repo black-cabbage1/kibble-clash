@@ -2,70 +2,19 @@
   "sample_rate": 44100,
   "channels": 1,
   "bit_depth": 16,
+  "version": "2.0.0",
+  "generated_at": "2026-08-12",
   "files": [
-    {
-      "name": "ui-click",
-      "usage": "일반 버튼 클릭",
-      "wav": "wav/ui-click.wav",
-      "ogg": "ogg/ui-click.ogg",
-      "duration_seconds": 0.12
-    },
-    {
-      "name": "dice-roll",
-      "usage": "주사위 굴림",
-      "wav": "wav/dice-roll.wav",
-      "ogg": "ogg/dice-roll.ogg",
-      "duration_seconds": 0.95
-    },
-    {
-      "name": "dice-land",
-      "usage": "주사위 결과 확정",
-      "wav": "wav/dice-land.wav",
-      "ogg": "ogg/dice-land.ogg",
-      "duration_seconds": 0.34
-    },
-    {
-      "name": "place-dice",
-      "usage": "밥그릇에 주사위 배치",
-      "wav": "wav/place-dice.wav",
-      "ogg": "ogg/place-dice.ogg",
-      "duration_seconds": 0.24
-    },
-    {
-      "name": "score-gain",
-      "usage": "사료 점수 획득",
-      "wav": "wav/score-gain.wav",
-      "ogg": "ogg/score-gain.ogg",
-      "duration_seconds": 0.55
-    },
-    {
-      "name": "kibble-clash",
-      "usage": "동률 충돌 발생",
-      "wav": "wav/kibble-clash.wav",
-      "ogg": "ogg/kibble-clash.ogg",
-      "duration_seconds": 0.72
-    },
-    {
-      "name": "round-complete",
-      "usage": "라운드 종료",
-      "wav": "wav/round-complete.wav",
-      "ogg": "ogg/round-complete.ogg",
-      "duration_seconds": 0.95
-    },
-    {
-      "name": "victory",
-      "usage": "최종 우승",
-      "wav": "wav/victory.wav",
-      "ogg": "ogg/victory.ogg",
-      "duration_seconds": 1.85
-    },
-    {
-      "name": "defeat",
-      "usage": "우승하지 못한 결과",
-      "wav": "wav/defeat.wav",
-      "ogg": "ogg/defeat.ogg",
-      "duration_seconds": 1.2
-    }
+    { "name": "ui-click", "usage": "발바닥처럼 둥근 버튼 클릭", "wav": "wav/ui-click.wav", "ogg": "ogg/ui-click.ogg", "duration_seconds": 0.14, "peak_dbfs": -11.0 },
+    { "name": "dice-roll", "usage": "밥그릇 속 사료 도도도독", "wav": "wav/dice-roll.wav", "ogg": "ogg/dice-roll.ogg", "duration_seconds": 0.72, "peak_dbfs": -9.0 },
+    { "name": "dice-land", "usage": "플라스틱 밥그릇 통", "wav": "wav/dice-land.wav", "ogg": "ogg/dice-land.ogg", "duration_seconds": 0.38, "peak_dbfs": -8.0 },
+    { "name": "select-dice", "usage": "코로 버튼을 누르는 뽁", "wav": "wav/select-dice.wav", "ogg": "ogg/select-dice.ogg", "duration_seconds": 0.20, "peak_dbfs": -9.5 },
+    { "name": "place-dice", "usage": "사료 묶음 토도독", "wav": "wav/place-dice.wav", "ogg": "ogg/place-dice.ogg", "duration_seconds": 0.31, "peak_dbfs": -9.0 },
+    { "name": "score-gain", "usage": "짧고 가벼운 강아지 멍", "wav": "wav/score-gain.wav", "ogg": "ogg/score-gain.ogg", "duration_seconds": 0.45, "peak_dbfs": -7.5 },
+    { "name": "kibble-clash", "usage": "놀란 듯한 짧은 왈", "wav": "wav/kibble-clash.wav", "ogg": "ogg/kibble-clash.ogg", "duration_seconds": 0.35, "peak_dbfs": -8.5 },
+    { "name": "round-complete", "usage": "경쾌한 멍 멍", "wav": "wav/round-complete.wav", "ogg": "ogg/round-complete.ogg", "duration_seconds": 0.95, "peak_dbfs": -7.5 },
+    { "name": "victory", "usage": "높낮이가 올라가는 신나는 세 번의 짖음", "wav": "wav/victory.wav", "ogg": "ogg/victory.ogg", "duration_seconds": 1.25, "peak_dbfs": -7.0 },
+    { "name": "defeat", "usage": "작고 부드러운 낑 소리", "wav": "wav/defeat.wav", "ogg": "ogg/defeat.ogg", "duration_seconds": 0.86, "peak_dbfs": -9.0 }
   ],
   "ogg_created": true
 }

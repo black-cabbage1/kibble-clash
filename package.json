@@ -18,12 +18,12 @@
     "pages:build": "npm run typecheck && npm run test:run && npm run preview:build",
     "pages:deploy": "npx wrangler pages deploy dist/web --project-name kibble-clash",
     "cloudflare:deploy": "npx wrangler deploy",
-    "build": "ait build",
-    "dev": "granite dev",
+    "build": "npm run preview:build && ait build",
+    "dev": "npm run preview:dev",
     "deploy": "ait deploy"
   },
   "dependencies": {
-    "@apps-in-toss/web-framework": "2.10.8"
+    "@apps-in-toss/web-framework": "3.0.3"
   },
   "devDependencies": {
     "typescript": "7.0.2",

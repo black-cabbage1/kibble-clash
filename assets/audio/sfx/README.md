@@ -1,16 +1,22 @@
-# 멍밥 쟁탈전 기본 효과음
+# 멍밥쟁탈전 효과음
 
-- WAV: 44.1kHz / 16bit / Mono
-- OGG: libvorbis quality 5
-- 각 파일은 피크 정규화 적용
+- WAV: 44.1kHz / 16bit / Mono 원본
+- OGG: Vorbis 배포 파일
+- 2026-08-12 귀여운 강아지·장난감 보드게임 콘셉트로 전면 교체
+- 조작음은 부드럽게 유지하고 성취 순간에는 짧은 합성 강아지 짖음 사용
+- 동시 재생을 고려해 피크를 -7~-11 dBFS 범위로 유지
 
 ## 구성
-- ui-click: 일반 버튼 클릭
-- dice-roll: 주사위 굴림
-- dice-land: 주사위 결과 확정
-- place-dice: 밥그릇에 주사위 배치
-- score-gain: 사료 점수 획득
-- kibble-clash: 동률 충돌 발생
-- round-complete: 라운드 종료
-- victory: 최종 우승
-- defeat: 우승하지 못한 결과
+
+- `ui-click`: 부드러운 나무 버튼 탭
+- `dice-roll`: 밥그릇 안에서 사료가 `도도도독` 구르는 소리
+- `dice-land`: 플라스틱 밥그릇이 짧게 울리는 `통!`
+- `select-dice`: 강아지가 코로 버튼을 누르는 `뽁!`
+- `place-dice`: 사료 묶음이 밥그릇에 들어가는 `토도독!`
+- `score-gain`: 가벼운 한 번의 `멍!`
+- `kibble-clash`: 놀란 듯한 짧은 `왈!`
+- `round-complete`: 경쾌한 `멍! 멍!`
+- `victory`: 높낮이가 올라가는 세 번의 신나는 짖음
+- `defeat`: 작고 부드러운 `낑…`
+
+재생성: `python -B tools/generate_sfx.py`

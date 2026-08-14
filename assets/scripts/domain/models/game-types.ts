@@ -5,7 +5,10 @@ export type CharacterId =
   | 'poodle'
   | 'pug'
   | 'golden-retriever'
-  | 'welsh-corgi';
+  | 'welsh-corgi'
+  | 'maltese'
+  | 'pomeranian'
+  | 'bichon';
 export type GamePhase =
   | 'awaiting-choice'
   | 'round-result'
@@ -20,14 +23,26 @@ export interface PlayerDefinition {
   symbol: string;
 }
 
-export interface AiConfig {
+export type AiDifficulty = 'easy' | 'normal' | 'hard';
+
+export interface AiDifficultyConfig {
   rewardWeight: number;
-  diceWeight: number;
-  survivalRankWeight: number;
-  clashRiskPenalty: number;
-  clashOpponentBonus: number;
-  opportunityCostWeight: number;
-  randomError: number;
+  winningChanceWeight: number;
+  tieRiskWeight: number;
+  competitionRiskWeight: number;
+  diceEfficiencyWeight: number;
+  scoreSituationWeight: number;
+  roundSituationWeight: number;
+  optimalChoiceProbability: number;
+  temperature: number;
+  candidateLimit: number;
+}
+
+export interface AiConfig {
+  difficulty: AiDifficulty;
+  debug: boolean;
+  difficultyConfigs: Record<AiDifficulty, AiDifficultyConfig>;
+  personality?: string;
 }
 
 export interface GameConfig {
