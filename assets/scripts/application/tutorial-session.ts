@@ -2,6 +2,8 @@ import type { GameConfig, GameState, RollState } from '../domain/models/game-typ
 import { chooseFace, createGame } from '../domain/rules/game-engine';
 
 export type TutorialStep =
+  | 'game-goal'
+  | 'reward-intro'
   | 'roll-clash'
   | 'select-clash-dice'
   | 'select-clash-bowl'

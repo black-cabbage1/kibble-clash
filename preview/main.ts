@@ -19,6 +19,7 @@ import { chooseAiAction } from '../assets/scripts/domain/ai/choose-action';
 import { createMatchResultViewModel } from '../assets/scripts/application/match-result-view-model';
 import { leaderboardScoreFromPlayers } from '../assets/scripts/application/leaderboard-score';
 import { getDifficultyRecommendation } from '../assets/scripts/application/difficulty-recommendation';
+import { isOfficialRankingEligible } from '../assets/scripts/application/official-ranking';
 import {
   canRoll,
   canSelectBowl,
@@ -89,6 +90,7 @@ import {
 // 토스 WebView가 게임 화면을 그리기 시작하자마자 가로 방향으로 전환한다.
 const restoreOrientation = setupGameOrientation();
 window.addEventListener('pagehide', () => {
+  cancelTurnTimers();
   stopAllSounds();
   restoreOrientation();
 }, { once: true });
@@ -121,6 +123,8 @@ let skipClashPresentation = false;
 let reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 let aiTurnTimer: number | null = null;
 let turnTimer: number | null = null;
+let roundIntermissionTimer: number | null = null;
+let roundIntermissionRound: number | null = null;
 let turnPhase: TurnPhase = 'waiting';
 type RollPresentation = 'rolling' | 'result-shown' | 'grouped';
 
@@ -153,7 +157,7 @@ let activeGameConfig: GameConfig = createGameConfigForCharacter(selectedCharacte
 let homeDialog: 'rules' | 'settings' | null = null;
 let homeDialogTriggerAction: 'open-rules' | 'open-settings' | null = null;
 let gameSafeArea: GameSafeAreaInsets = EMPTY_GAME_SAFE_AREA;
-type LeaderboardSubmissionStatus = 'idle' | 'submitting' | 'submitted' | 'failed' | 'unsupported';
+type LeaderboardSubmissionStatus = 'idle' | 'submitting' | 'submitted' | 'failed' | 'unsupported' | 'ineligible';
 let leaderboardSubmissionStatus: LeaderboardSubmissionStatus = 'idle';
 let leaderboardScore: number | null = null;
 let leaderboardSubmittedSession: number | null = null;
@@ -310,7 +314,7 @@ function characterSelectTemplate(): string {
   const difficultyCopy: Record<AiDifficulty, [string, string]> = {
     easy: ['쉬움', '가볍게 즐기기 좋아요.'],
     normal: ['보통', '보상과 경쟁 상황을 고려해 플레이해요.'],
-    hard: ['어려움', '점수와 경쟁 상황을 적극적으로 분석해요.'],
+    hard: ['어려움', '전략적인 AI · 공식 랭킹 참여'],
   };
   const selectedVisual = characterVisual(selectedCharacterId);
   const selectedCustomName = characterNames[selectedCharacterId] ?? '';
@@ -342,7 +346,7 @@ function characterSelectTemplate(): string {
       <section class="difficulty-picker" aria-labelledby="difficulty-title">
         <strong id="difficulty-title">AI 난이도</strong>
         <div role="radiogroup" aria-label="AI 난이도">
-          ${(Object.entries(difficultyCopy) as [AiDifficulty, [string, string]][]).map(([value, [label]]) => `<button role="radio" aria-checked="${selectedAiDifficulty === value}" class="${selectedAiDifficulty === value ? 'selected' : ''}" data-difficulty="${value}">${label}</button>`).join('')}
+          ${(Object.entries(difficultyCopy) as [AiDifficulty, [string, string]][]).map(([value, [label]]) => `<button role="radio" aria-checked="${selectedAiDifficulty === value}" class="${selectedAiDifficulty === value ? 'selected' : ''}" data-difficulty="${value}">${label}${isOfficialRankingEligible(value) ? '<em class="official-ranking-badge">🏆 공식 랭킹</em>' : ''}</button>`).join('')}
         </div>
         <small>${difficultyCopy[selectedAiDifficulty][1]}</small>
       </section>
@@ -404,9 +408,13 @@ function characterSelectTemplate(): string {
   </main>`;
 }
 
-function rewardCards(rewards: number[]): string {
-  return `<div class="reward-cards game-rewards" aria-label="사료 카드 ${rewards.join(', ')}점">
-    ${[...rewards].sort((a, b) => b - a).map((reward) => `<span title="${reward}점 사료 카드">
+function rewardCards(rewards: number[], showTutorialRanks = false): string {
+  const sortedRewards = [...rewards].sort((a, b) => b - a);
+  const accessibleLabel = sortedRewards.map((reward, index) => `${index + 1}등 ${reward}점`).join(', ');
+  return `<div class="reward-cards game-rewards ${showTutorialRanks ? 'tutorial-target tutorial-ranked-rewards' : ''}"
+    aria-label="${showTutorialRanks ? `순위별 사료 보상, ${accessibleLabel}` : `사료 카드 ${rewards.join(', ')}점`}">
+    ${sortedRewards.map((reward, index) => `<span title="${reward}점 사료 카드" ${showTutorialRanks ? 'aria-hidden="true"' : ''}>
+      ${showTutorialRanks ? `<small aria-hidden="true">${index + 1}등</small>` : ''}
       <img class="asset-image reward-art" src="${ART_PATHS.reward(reward)}" alt=""><b>${reward}</b>
     </span>`).join('')}
   </div>`;
@@ -439,7 +447,7 @@ function bowlTemplate(face: number): string {
       const count = bowl.placements[player.id] ?? 0;
       const isLeader = status.leaderIds.includes(player.id);
       return `<li class="game-token team-${player.id} ${status.kind === 'tie' && isLeader ? 'is-clashing' : ''}"
-        title="${player.name} 주사위 ${count}개">
+        title="${player.name} 주사위 ${face}, ${count}개 배치">
         ${dogAvatar(player, 'game-token-avatar')}
         <b>×${count}</b>
         ${status.kind === 'tie' && isLeader ? '<span class="token-status" aria-hidden="true">⚡</span>' : ''}
@@ -447,15 +455,19 @@ function bowlTemplate(face: number): string {
       </li>`;
     }).join('');
   const human = state.players.find((player) => player.kind === 'human');
-  const tutorialTarget = sessionMode === 'tutorial'
+  const tutorialPlacementTarget = sessionMode === 'tutorial'
     && ((tutorialStep === 'select-clash-bowl' && face === TUTORIAL_CLASH_FACE)
       || (tutorialStep === 'select-success-bowl' && face === TUTORIAL_SUCCESS_FACE));
+  const tutorialClashTarget = sessionMode === 'tutorial'
+    && tutorialStep === 'clash' && face === TUTORIAL_CLASH_FACE;
+  const tutorialTarget = tutorialPlacementTarget || tutorialClashTarget;
+  const rewardLabel = [...bowl.rewards].sort((left, right) => right - left)
+    .map((reward, index) => `${index + 1}등 ${reward}점`).join(', ');
   return `<article class="bowl-card game-bowl status-${status.kind} ${tutorialTarget ? 'tutorial-target' : ''}"
-    data-bowl-face="${face}" ${tutorialTarget ? 'role="button" tabindex="0"' : ''} aria-label="${face}번 밥그릇, 보상 총 ${bowl.rewardTotal}점${tutorialTarget ? ', 여기에 주사위 놓기' : ''}">
+    data-bowl-face="${face}" ${tutorialPlacementTarget ? 'role="button" tabindex="0"' : ''} aria-label="${face}번 밥그릇, 순위별 보상 ${rewardLabel}${tutorialPlacementTarget ? ', 여기에 주사위 놓기' : ''}">
     <div class="game-bowl-top">
       <span class="bowl-number" aria-label="${face}번 밥그릇">${face}</span>
-      ${rewardCards(bowl.rewards)}
-      <strong class="reward-total" title="보상 합계 ${bowl.rewardTotal}점">${bowl.rewardTotal}<small>점</small></strong>
+      ${rewardCards(bowl.rewards, sessionMode === 'tutorial' && tutorialStep === 'reward-intro' && face === TUTORIAL_CLASH_FACE)}
       ${status.kind === 'tie' ? `<span class="bowl-status"><b>${status.label}</b></span>` : ''}
     </div>
     <div class="bowl-shape">
@@ -577,39 +589,65 @@ function gameTemplate(): string {
     </section>
     ${diceActionPanel}
     ${rollOverlay()}
+    ${roundIntermissionOverlay()}
     ${tutorialOverlay()}
   </main>`;
+}
+
+function roundIntermissionOverlay(): string {
+  if (state === null || roundIntermissionRound !== state.round) return '';
+  const isFirstRound = state.round === 1;
+  const isFinalRound = state.round === activeGameConfig.rounds;
+  const accessibleLabel = isFinalRound
+    ? `마지막 라운드, 총 ${activeGameConfig.rounds}라운드 중 ${state.round}라운드`
+    : `${state.round}라운드, 총 ${activeGameConfig.rounds}라운드`;
+  return `<aside class="round-intermission ${isFinalRound ? 'is-final' : ''}" style="--round-intermission-duration: ${roundIntermissionDuration(state.round)}ms"
+    role="status" aria-live="assertive" aria-atomic="true" aria-label="${accessibleLabel}">
+    <div class="round-intermission-card" aria-hidden="true">
+      <span>${isFinalRound ? 'FINAL ROUND' : 'ROUND'}</span>
+      <strong>${state.round} <small>/ ${activeGameConfig.rounds}</small></strong>
+      ${isFirstRound ? `<p>${activeGameConfig.rounds}라운드가 끝나면<br>최종 승자가 결정돼요!</p>` : ''}
+    </div>
+  </aside>`;
 }
 
 function tutorialOverlay(): string {
   if (sessionMode !== 'tutorial' || tutorialStep === null) return '';
   const copy: Record<TutorialStep, [string, string]> = {
-    'roll-clash': ['1 / 6', '먼저 주사위를 굴려봐!'],
-    'select-clash-dice': ['2 / 6', '⚀ ×2를 골라봐! 같은 숫자는 한꺼번에 움직여.'],
-    'select-clash-bowl': ['3 / 6', '강조된 1번 밥그릇을 눌러 주사위를 놓아봐!'],
-    clash: ['4 / 6', 'CLASH! 같은 밥그릇에서 수량이 같으면 서로 상쇄돼.'],
-    'roll-success': ['5 / 6', '이번엔 겹치지 않게 한 번 더 굴려봐!'],
-    'select-success-dice': ['5 / 6', '⚂ ×1을 골라봐!'],
-    'select-success-bowl': ['5 / 6', '3번 밥그릇에 놓아봐!'],
-    success: ['5 / 6', '성공! 혼자 살아남으면 밥그릇의 사료를 가져갈 수 있어.'],
-    'round-result': ['6 / 6', 'Clash를 피하면서 사료가 많은 밥그릇을 노리는 게 핵심이야!'],
+    'game-goal': ['1/6', '사료를 가장 많이 모은 강아지가 승리해요!'],
+    'reward-intro': ['2/6', '높은 숫자부터 준비된 순위 보상을 받아요. 꼭 1등이 아니어도 점수를 받을 수 있어요!'],
+    'roll-clash': ['3/6', '직접 숫자를 골라볼까요?'],
+    'select-clash-dice': ['3/6', '⚀ ×2를 골라봐요.'],
+    'select-clash-bowl': ['3/6', '강조된 1번 밥그릇에 놓아봐요!'],
+    clash: ['4/6', '같은 숫자가 만나면 CLASH! 충돌한 주사위는 제외되고, 남은 주사위 중 높은 숫자부터 순위 보상을 받아요.'],
+    'roll-success': ['5/6', '이번엔 같은 수량을 피해볼까요?'],
+    'select-success-dice': ['5/6', '⚂ ×1을 골라봐요!'],
+    'select-success-bowl': ['5/6', '3번 밥그릇에 놓아봐요!'],
+    success: ['5/6', '좋아요! 이제 결과를 확인해볼까요?'],
+    'round-result': ['6/6', '높은 숫자뿐 아니라 CLASH를 피하는 것도 중요해요!'],
     complete: ['완료', '준비 완료! 이제 밥그릇을 차지하러 가볼까?'],
   };
   const [progress, message] = copy[tutorialStep];
-  const spotlightVisible = tutorialStep === 'roll-clash'
+  const spotlightVisible = tutorialStep === 'reward-intro'
+    || tutorialStep === 'roll-clash'
     || tutorialStep === 'select-clash-dice'
     || tutorialStep === 'select-clash-bowl'
+    || tutorialStep === 'clash'
     || tutorialStep === 'roll-success'
     || tutorialStep === 'select-success-dice'
     || tutorialStep === 'select-success-bowl';
-  const action = tutorialStep === 'clash'
-    ? '<button class="primary" data-action="tutorial-after-clash">다음 체험</button>'
+  const action = tutorialStep === 'game-goal'
+    ? '<button class="primary" data-action="tutorial-show-rewards">다음</button>'
+    : tutorialStep === 'reward-intro'
+      ? '<button class="primary" data-action="tutorial-start-practice">직접 해보기</button>'
+      : tutorialStep === 'clash'
+        ? '<button class="primary" data-action="tutorial-after-clash">다음</button>'
     : tutorialStep === 'success'
       ? '<button class="primary" data-action="tutorial-show-result">결과 보기</button>'
       : tutorialStep === 'round-result'
-        ? '<button class="primary" data-action="complete-tutorial">튜토리얼 마치기</button>'
+        ? '<button class="primary" data-action="complete-tutorial">튜토리얼 완료</button>'
         : tutorialStep === 'complete'
-          ? '<div class="tutorial-complete-actions"><button class="primary" data-action="tutorial-choose-character">강아지 고르고 시작</button><button data-action="tutorial-home">홈으로</button></div>'
+          ? '<div class="tutorial-complete-actions"><button class="primary" data-action="tutorial-choose-character">강아지 선택</button><button data-action="tutorial-home">홈으로</button></div>'
           : '';
   const reward = tutorialStep === 'complete' && tutorialRewardEarned > 0
     ? `<div class="tutorial-reward"><span>튜토리얼 완료 보상</span><strong>+${formatPoints(tutorialRewardEarned)}</strong></div>` : '';
@@ -617,9 +655,12 @@ function tutorialOverlay(): string {
     <h2 id="tutorial-exit-title">튜토리얼을 그만볼까요?</h2><p>언제든 게임 방법에서 다시 볼 수 있어요.</p>
     <div><button data-action="continue-tutorial">계속하기</button><button data-action="confirm-exit-tutorial">나가기</button></div>
   </div>` : '';
+  const coachContent = tutorialStep === 'complete'
+    ? `<div class="tutorial-complete-copy"><small>🎉</small><h2>튜토리얼 완료!</h2><p>이제 원하는 강아지를 골라<br>진짜 게임을 시작해볼까요?</p></div>${reward}${action}`
+    : `<small>튜토리얼 ${progress}</small><strong>${message}</strong>${reward}${action}`;
   return `<aside class="tutorial-guide step-${tutorialStep}" role="region" aria-live="polite" aria-label="튜토리얼 ${progress}">
     ${spotlightVisible ? '<span class="tutorial-spotlight" aria-hidden="true"></span>' : ''}
-    <div class="tutorial-coach" tabindex="-1"><small>튜토리얼 ${progress}</small><strong>${message}</strong>${reward}${action}</div>
+    <div class="tutorial-coach" tabindex="-1">${coachContent}</div>
     ${confirm}
   </aside>`;
 }
@@ -629,13 +670,35 @@ function positionTutorialSpotlight(): void {
   const target = app.querySelector<HTMLElement>('.tutorial-target');
   if (spotlight === null || target === null) return;
   const rect = target.getBoundingClientRect();
-  const padding = 7;
+  const padding = target.classList.contains('tutorial-ranked-rewards') ? 14 : 7;
+  const isRollButtonTarget = target.matches('.roll-button, .overlay-roll-button');
+  const spotlightOffsetY = isRollButtonTarget ? 4 : 0;
   spotlight.style.left = `${rect.left - padding}px`;
-  spotlight.style.top = `${rect.top - padding}px`;
+  spotlight.style.top = `${rect.top - padding - spotlightOffsetY}px`;
   spotlight.style.width = `${rect.width + padding * 2}px`;
   spotlight.style.height = `${rect.height + padding * 2}px`;
-  spotlight.style.borderRadius = `${Math.min(24, Math.max(12, rect.height / 4))}px`;
+  spotlight.style.borderRadius = isRollButtonTarget
+    ? '999px'
+    : `${Math.min(24, Math.max(12, rect.height / 4))}px`;
   spotlight.classList.add('is-positioned');
+
+  const coach = app.querySelector<HTMLElement>('.tutorial-coach');
+  if (coach === null) return;
+  const coachRect = coach.getBoundingClientRect();
+  const viewportPadding = 12;
+  const safeTop = Math.max(viewportPadding, gameSafeArea.top + viewportPadding);
+  const safeBottom = Math.max(viewportPadding, gameSafeArea.bottom + viewportPadding);
+  const gap = 14;
+  const spaceAbove = rect.top - safeTop;
+  const placeAbove = spaceAbove >= coachRect.height + gap;
+  const desiredTop = placeAbove ? rect.top - coachRect.height - gap : rect.bottom + gap;
+  const maximumTop = window.innerHeight - safeBottom - coachRect.height;
+  const top = Math.max(safeTop, Math.min(desiredTop, maximumTop));
+  const desiredLeft = rect.left + rect.width / 2 - coachRect.width / 2;
+  const left = Math.max(viewportPadding, Math.min(desiredLeft, window.innerWidth - viewportPadding - coachRect.width));
+  coach.style.inset = `${top}px auto auto ${left}px`;
+  coach.style.translate = '0 0';
+  coach.dataset.placement = placeAbove ? 'above' : 'below';
 }
 
 function settlementRow(result: BowlSettlement): string {
@@ -682,11 +745,11 @@ function roundResultTemplate(): string {
   state.lastRoundSettlement.bowls.forEach((bowl) => bowl.awards.forEach((award) => {
     roundRewards.set(award.playerId, (roundRewards.get(award.playerId) ?? 0) + award.reward);
   }));
-  const roundStar = [...state.players].sort(
-    (left, right) => (roundRewards.get(right.id) ?? 0) - (roundRewards.get(left.id) ?? 0),
-  )[0];
+  const highestRoundReward = Math.max(...state.players.map((player) => roundRewards.get(player.id) ?? 0));
+  const roundStars = state.players.filter((player) => (roundRewards.get(player.id) ?? 0) === highestRoundReward);
+  const roundStar = roundStars[0];
   const human = state.players.find((player) => player.kind === 'human');
-  const roundStarVisual = roundStar === undefined ? null : characterVisual(roundStar.characterId);
+  const roundStarNames = roundStars.map((player) => player.name).join(' · ');
   return `<main class="result round-result screen paper-panel">
     ${clashOverlay()}
     <header class="round-result-heading">
@@ -697,8 +760,8 @@ function roundResultTemplate(): string {
     <section class="round-result-body">
       <div class="round-star team-${roundStar?.id ?? ''}">
         <span class="star-crown">♛</span>
-        ${roundStarVisual === null ? '' : `<img class="asset-image round-star-art" src="${roundStarVisual.selectImage}" alt="${roundStar?.name}">`}
-        <div><small>이번 라운드 사료왕</small><h2>${roundStar?.name ?? ''}</h2><strong>+${roundStar === undefined ? 0 : roundRewards.get(roundStar.id) ?? 0}점</strong></div>
+        <div class="round-star-arts" aria-hidden="true">${roundStars.map((player) => `<img class="asset-image round-star-art" src="${characterVisual(player.characterId).selectImage}" alt="">`).join('')}</div>
+        <div><small>이번 라운드 ${roundStars.length > 1 ? '공동 사료왕' : '사료왕'}</small><h2>${roundStarNames}</h2><strong>+${highestRoundReward}점</strong></div>
       </div>
       <ul class="settlement-list">${state.lastRoundSettlement.bowls.map(settlementRow).join('')}</ul>
     </section>
@@ -713,6 +776,7 @@ function leaderboardStatusCopy(score: number): string {
   if (leaderboardSubmissionStatus === 'submitted') return `${formattedScore}점이 리더보드에 등록됐어요`;
   if (leaderboardSubmissionStatus === 'failed') return '점수 기록에 실패했어요. 잠시 후 다시 시도해 주세요';
   if (leaderboardSubmissionStatus === 'unsupported') return '현재 환경에서는 순위 기능을 사용할 수 없어요';
+  if (leaderboardSubmissionStatus === 'ineligible') return '공식 랭킹은 어려움 난이도에서 참여할 수 있어요';
   return '최종 결과를 확인하고 있어요';
 }
 
@@ -731,8 +795,9 @@ function matchResultTemplate(): string {
   const difficultyCopy: Record<AiDifficulty, [string, string]> = {
     easy: ['쉬움', '가볍게 즐기기 좋아요.'],
     normal: ['보통', '보상과 경쟁 상황을 고려해 플레이해요.'],
-    hard: ['어려움', '점수와 경쟁 상황을 적극적으로 분석해요.'],
+    hard: ['어려움', '전략적인 AI · 공식 랭킹 참여'],
   };
+  const officialRankingEligible = isOfficialRankingEligible(activeGameConfig.ai.difficulty);
   const difficultyDialog = difficultyDialogOpen ? `<section class="difficulty-dialog-backdrop">
     <div class="difficulty-dialog" role="dialog" aria-modal="true" aria-labelledby="result-difficulty-title">
       <h2 id="result-difficulty-title">AI 난이도</h2>
@@ -743,7 +808,7 @@ function matchResultTemplate(): string {
     </div>
   </section>` : '';
   return `<main class="result match-result screen paper-panel">
-    <header class="match-heading" tabindex="-1"><p class="eyebrow">MATCH COMPLETE · ${activeGameConfig.rounds}라운드 최종 결과</p><h1>${heading}</h1><p>${description}</p></header>
+    <header class="match-heading" tabindex="-1"><p class="eyebrow">MATCH COMPLETE · ${activeGameConfig.rounds}라운드 최종 결과</p><h1>${heading}</h1><p>${description}</p><span class="result-difficulty-badge">난이도 · ${difficultyCopy[activeGameConfig.ai.difficulty][0]}${officialRankingEligible ? ' 🏆 공식 랭킹' : ''}</span></header>
     <section class="match-result-content">
       <section class="winner-stage team-${winner.id}" aria-label="우승자 ${viewModel.winner.displayName}, ${viewModel.winner.score}점">
         <div class="winner-confetti" aria-hidden="true">✦　●　✦<br>　●　✦　</div>
@@ -779,7 +844,7 @@ function matchResultTemplate(): string {
         </section>
         <section class="leaderboard-score-card is-${leaderboardSubmissionStatus}" aria-live="polite">
           <div><span>GAME CENTER</span><strong>${leaderboardStatusCopy(leaderboardScore ?? viewModel.humanResult.score)}</strong></div>
-          <button data-action="open-leaderboard" ${leaderboardSubmissionStatus === 'unsupported' ? 'disabled' : ''}>리더보드 보기 →</button>
+          ${officialRankingEligible ? `<button data-action="open-leaderboard" ${leaderboardSubmissionStatus === 'unsupported' ? 'disabled' : ''}>리더보드 보기 →</button>` : ''}
         </section>
       </section>
     </section>
@@ -809,6 +874,11 @@ function resetLeaderboardSubmission(): void {
 }
 
 async function handleOpenLeaderboard(): Promise<void> {
+  if (!isOfficialRankingEligible(activeGameConfig.ai.difficulty)) {
+    leaderboardSubmissionStatus = 'ineligible';
+    render();
+    return;
+  }
   const result = await openLeaderboard();
   if (result === 'opened') return;
   if (result === 'unsupported') leaderboardSubmissionStatus = 'unsupported';
@@ -828,8 +898,8 @@ function enterMatchResult(gameState: GameState, submitScore = true): void {
   }
   leaderboardScore = leaderboardScoreFromPlayers(gameState.players);
 
-  if (!submitScore || !isGameCenterSupported()) {
-    leaderboardSubmissionStatus = 'unsupported';
+  if (!submitScore || !isOfficialRankingEligible(activeGameConfig.ai.difficulty) || !isGameCenterSupported()) {
+    leaderboardSubmissionStatus = !isOfficialRankingEligible(activeGameConfig.ai.difficulty) ? 'ineligible' : 'unsupported';
     render();
     return;
   }
@@ -844,7 +914,8 @@ function enterMatchResult(gameState: GameState, submitScore = true): void {
   render();
   const submittedSession = sessionVersion;
   void submitLeaderboardScore(leaderboardScore).then((result) => {
-    if (submittedSession !== sessionVersion || state?.phase !== 'match-result') return;
+    if (submittedSession !== sessionVersion || state?.phase !== 'match-result'
+      || !isOfficialRankingEligible(activeGameConfig.ai.difficulty)) return;
     if (result === 'submitted') leaderboardSubmissionStatus = 'submitted';
     else if (result === 'unsupported') leaderboardSubmissionStatus = 'unsupported';
     else leaderboardSubmissionStatus = 'failed';
@@ -870,7 +941,7 @@ function startGame(): void {
   skipClashPresentation = false;
   difficultyDialogOpen = false;
   screen = 'game';
-  render();
+  startRoundIntermission();
 }
 
 function startTutorial(): void {
@@ -878,7 +949,7 @@ function startTutorial(): void {
   sessionVersion += 1;
   resetLeaderboardSubmission();
   sessionMode = 'tutorial';
-  tutorialStep = 'roll-clash';
+  tutorialStep = 'game-goal';
   tutorialIntroOpen = false;
   tutorialExitConfirm = false;
   tutorialRewardEarned = 0;
@@ -887,7 +958,7 @@ function startTutorial(): void {
   activeGameConfig = createTutorialConfig(createGameConfigForCharacter(selectedCharacterId, characterNames));
   state = createTutorialGame(activeGameConfig, nextSeed);
   nextSeed += 1;
-  turnPhase = 'roll-ready';
+  turnPhase = 'waiting';
   skipClashPresentation = true;
   screen = 'game';
   render();
@@ -964,10 +1035,38 @@ function cancelTurnTimers(): void {
     window.clearTimeout(turnTimer);
     turnTimer = null;
   }
+  if (roundIntermissionTimer !== null) {
+    window.clearTimeout(roundIntermissionTimer);
+    roundIntermissionTimer = null;
+  }
+  roundIntermissionRound = null;
 }
 
 function syncTurnPhase(): void {
   turnPhase = initialTurnPhase(state?.players[state.currentPlayerIndex]?.kind);
+}
+
+function roundIntermissionDuration(round: number): number {
+  return round === 1 || round === activeGameConfig.rounds ? 1_400 : 1_050;
+}
+
+function startRoundIntermission(): void {
+  if (state === null || sessionMode === 'tutorial') { render(); return; }
+  if (roundIntermissionTimer !== null) window.clearTimeout(roundIntermissionTimer);
+  cancelAiTurn();
+  turnPhase = 'waiting';
+  roundIntermissionRound = state.round;
+  const scheduledRound = state.round;
+  const scheduledVersion = sessionVersion;
+  const duration = roundIntermissionDuration(scheduledRound);
+  render();
+  roundIntermissionTimer = window.setTimeout(() => {
+    roundIntermissionTimer = null;
+    if (scheduledVersion !== sessionVersion || state?.round !== scheduledRound) return;
+    roundIntermissionRound = null;
+    syncTurnPhase();
+    render();
+  }, duration);
 }
 
 function beginRoll(): void {
@@ -1073,6 +1172,7 @@ function placeTutorialBowl(face: number): void {
 function scheduleAiTurn(): void {
   cancelAiTurn();
   if (sessionMode === 'tutorial') return;
+  if (roundIntermissionRound !== null) return;
   if (state?.phase !== 'awaiting-choice') return;
   const current = state.players[state.currentPlayerIndex];
   if (current?.kind !== 'ai') return;
@@ -1353,6 +1453,19 @@ app.addEventListener('click', (event) => {
     render();
     return;
   }
+  if (action === 'tutorial-show-rewards' && tutorialStep === 'game-goal') {
+    tutorialStep = 'reward-intro';
+    render();
+    window.requestAnimationFrame(() => app.querySelector<HTMLElement>('.tutorial-coach')?.focus());
+    return;
+  }
+  if (action === 'tutorial-start-practice' && tutorialStep === 'reward-intro') {
+    tutorialStep = 'roll-clash';
+    turnPhase = 'roll-ready';
+    render();
+    window.requestAnimationFrame(() => app.querySelector<HTMLElement>('[data-action="roll-dice"]')?.focus());
+    return;
+  }
   if (action === 'tutorial-after-clash' && tutorialStep === 'clash') {
     tutorialStep = 'roll-success';
     turnPhase = 'roll-ready';
@@ -1438,9 +1551,8 @@ app.addEventListener('click', (event) => {
       enterMatchResult(state);
       return;
     }
-    syncTurnPhase();
     skipClashPresentation = reduceMotion;
-    render();
+    startRoundIntermission();
   }
   if (action === 'skip-clash') { skipClashPresentation = true; render(); }
   if (action === 'toggle-motion') {

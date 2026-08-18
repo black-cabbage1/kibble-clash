@@ -6,9 +6,18 @@ import { availableFaces } from '../rules/dice';
 export interface AiCandidate {
   face: number; diceCount: number; rewardValue: number; winningChance: number;
   tieRisk: number; competitionRisk: number; diceEfficiency: number;
+  expectedReward: number; prospectiveRank: number | null;
   scoreSituation: number; roundSituation: number; score: number;
 }
 export interface AiChoice { face: number; rngState: number; scores: Record<number, number>; candidates: AiCandidate[]; }
+
+export const HARD_AI_STRATEGY_CONFIG = {
+  expectedRewardWeight: 0.7,
+  expectedRewardRatioWeight: 18,
+  extraClashRiskWeight: 22,
+  trailingUpsideWeight: 24,
+  leadingSafetyWeight: 18,
+} as const;
 
 function candidateFor(state: GameState, config: GameConfig, player: PlayerState, bowl: BowlState, face: number, weights: AiDifficultyConfig): AiCandidate {
   const diceCount = state.currentRoll.counts[face - 1] ?? 0;
@@ -16,6 +25,9 @@ function candidateFor(state: GameState, config: GameConfig, player: PlayerState,
   const opponents = Object.entries(bowl.placements).filter(([id, count]) => id !== player.id && count > 0).map(([, count]) => count);
   const higher = opponents.filter((count) => count > ownAfter).length;
   const equal = opponents.filter((count) => count === ownAfter).length;
+  const sortedRewards = [...bowl.rewards].sort((left, right) => right - left);
+  const prospectiveRank = equal > 0 || higher >= sortedRewards.length ? null : higher + 1;
+  const expectedReward = prospectiveRank === null ? 0 : sortedRewards[prospectiveRank - 1] ?? 0;
   const winningChance = equal > 0 ? 0.08 : higher === 0 ? 1 : Math.max(0.12, 1 - higher / Math.max(1, state.players.length - 1));
   const tieRisk = equal > 0 ? 1 : opponents.some((count) => Math.abs(count - ownAfter) === 1) ? 0.3 : 0;
   const competitionRisk = opponents.length / Math.max(1, state.players.length - 1) * (winningChance >= 0.9 ? 0.35 : 1);
@@ -28,8 +40,18 @@ function candidateFor(state: GameState, config: GameConfig, player: PlayerState,
   const riskValue = bowl.rewardTotal / Math.max(1, Math.max(...state.bowls.map((candidate) => candidate.rewardTotal)));
   const scoreSituation = trailing * riskValue - leading * competitionRisk;
   const roundSituation = progress * scoreSituation;
-  const score = bowl.rewardTotal * weights.rewardWeight + winningChance * weights.winningChanceWeight + diceEfficiency * weights.diceEfficiencyWeight + scoreSituation * weights.scoreSituationWeight + roundSituation * weights.roundSituationWeight - competitionRisk * weights.competitionRiskWeight - tieRisk * weights.tieRiskWeight;
-  return { face, diceCount, rewardValue: bowl.rewardTotal, winningChance, tieRisk, competitionRisk, diceEfficiency, scoreSituation, roundSituation, score };
+  let score = bowl.rewardTotal * weights.rewardWeight + winningChance * weights.winningChanceWeight + diceEfficiency * weights.diceEfficiencyWeight + scoreSituation * weights.scoreSituationWeight + roundSituation * weights.roundSituationWeight - competitionRisk * weights.competitionRiskWeight - tieRisk * weights.tieRiskWeight;
+  if (config.ai.difficulty === 'hard') {
+    const maximumReward = Math.max(1, ...state.bowls.flatMap((candidate) => candidate.rewards));
+    const expectedRewardRatio = expectedReward / maximumReward;
+    const strategy = HARD_AI_STRATEGY_CONFIG;
+    score += expectedReward * strategy.expectedRewardWeight
+      + expectedRewardRatio * strategy.expectedRewardRatioWeight
+      - tieRisk * strategy.extraClashRiskWeight
+      + progress * trailing * expectedRewardRatio * strategy.trailingUpsideWeight
+      + progress * leading * (1 - tieRisk) * (1 - competitionRisk) * strategy.leadingSafetyWeight;
+  }
+  return { face, diceCount, rewardValue: bowl.rewardTotal, winningChance, tieRisk, competitionRisk, diceEfficiency, expectedReward, prospectiveRank, scoreSituation, roundSituation, score };
 }
 
 function selectCandidate(candidates: readonly AiCandidate[], randomValue: number, weights: AiDifficultyConfig): AiCandidate {

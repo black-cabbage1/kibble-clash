@@ -52,6 +52,19 @@ describe('AI difficulty evaluation', () => {
     expect(advantage(trailing)).toBeGreaterThan(advantage(leading));
   });
 
+  it('hard evaluates the reward for the prospective surviving rank', () => {
+    const state = scenario([80, 50, 50, 50, 50, 50], [{ p1: 4 }, {}, {}, {}, {}, {}], [2, 1, 0, 0, 0, 0]);
+    state.bowls[0] = { ...state.bowls[0]!, rewards: [50, 20, 10], rewardTotal: 80 };
+    const candidates = evaluateAiCandidates(state, config('hard'));
+    const secondPlace = candidates.find((candidate) => candidate.face === 1)!;
+    const firstPlace = candidates.find((candidate) => candidate.face === 2)!;
+    expect(secondPlace.prospectiveRank).toBe(2);
+    expect(secondPlace.expectedReward).toBe(20);
+    expect(firstPlace.prospectiveRank).toBe(1);
+    expect(firstPlace.expectedReward).toBe(50);
+    expect(firstPlace.score).toBeGreaterThan(secondPlace.score);
+  });
+
   it('uses one decision RNG step regardless of difficulty', () => {
     const state = scenario([90, 50, 50, 50, 50, 50], [{ p1: 1 }, {}, {}, {}, {}, {}], [2, 1, 0, 0, 0, 0], 1, [0, 0, 0, 0], 98765);
     const rngStates = (['easy', 'normal', 'hard'] as const).map((difficulty) => chooseAiAction(state, config(difficulty)).rngState);
